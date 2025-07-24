@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
 
 export default function TestDatabase() {
   const [connected, setConnected] = useState(false)
@@ -10,7 +9,10 @@ export default function TestDatabase() {
   useEffect(() => {
     async function testConnection() {
       try {
+        // Import supabase dynamically to avoid build issues
+        const { supabase } = await import('../../lib/supabase')
         const { data, error } = await supabase.from('profiles').select('count')
+        
         if (error) {
           console.error('Supabase error:', error)
           setError(error.message)
@@ -39,18 +41,7 @@ export default function TestDatabase() {
       </h1>
       
       {loading ? (
-        <div>
-          <div style={{ 
-            width: '40px', 
-            height: '40px', 
-            border: '4px solid #e5e7eb',
-            borderTop: '4px solid #ea580c',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 1rem'
-          }}></div>
-          <p style={{ fontSize: '1.2rem', color: '#6b7280' }}>Testing connection...</p>
-        </div>
+        <p style={{ fontSize: '1.2rem', color: '#6b7280' }}>Testing connection...</p>
       ) : (
         <div>
           {connected ? (
@@ -70,21 +61,8 @@ export default function TestDatabase() {
                 Connection Failed
               </h2>
               <p style={{ color: '#6b7280', marginBottom: '1rem' }}>
-                There's an issue with the database connection.
+                Error: {error}
               </p>
-              {error && (
-                <div style={{ 
-                  backgroundColor: '#fef2f2', 
-                  padding: '1rem', 
-                  borderRadius: '0.5rem',
-                  marginBottom: '2rem',
-                  border: '1px solid #fecaca'
-                }}>
-                  <p style={{ color: '#dc2626', fontSize: '0.9rem' }}>
-                    Error: {error}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -101,13 +79,6 @@ export default function TestDatabase() {
       >
         ← Back to Home
       </a>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }
