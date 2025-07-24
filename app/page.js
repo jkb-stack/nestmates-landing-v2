@@ -11,7 +11,7 @@ export default function HomePage() {
             <img 
               src="/NestMates_App_Icon.png" 
               alt="NestMates Logo" 
-              style={{ height: '48px', width: 'auto' }}
+              style={{ height: '40px', width: 'auto' }}
             />
           </div>
           <nav style={{ display: 'flex', gap: '1.5rem' }}>
@@ -30,7 +30,7 @@ export default function HomePage() {
             <img 
               src="/NestMates_Logo_Tagline.png" 
               alt="NestMates - Rediscover Love Together" 
-              style={{ height: '200px', width: 'auto', margin: '0 auto', display: 'block', marginBottom: '1.5rem' }}
+              style={{ height: '160px', width: 'auto', margin: '0 auto', display: 'block', marginBottom: '1.5rem' }}
             />
           </div>
           
@@ -214,7 +214,7 @@ export default function HomePage() {
             <img 
               src="/NestMates_App_Icon.png" 
               alt="NestMates Logo" 
-              style={{ height: '40px', width: 'auto', filter: 'brightness(0) invert(1)' }}
+              style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)' }}
             />
           </div>
           <p style={{ color: '#9ca3af' }}>
