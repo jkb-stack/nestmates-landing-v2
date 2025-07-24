@@ -11,7 +11,7 @@ export default function HomePage() {
             <img 
               src="/NestMates_App_Icon.png" 
               alt="NestMates Logo" 
-              style={{ height: '40px', width: 'auto' }}
+              style={{ height: '56px', width: 'auto' }}
             />
           </div>
           <nav style={{ display: 'flex', gap: '1.5rem' }}>
@@ -30,7 +30,7 @@ export default function HomePage() {
             <img 
               src="/NestMates_Logo_Tagline.png" 
               alt="NestMates - Rediscover Love Together" 
-              style={{ height: '160px', width: 'auto', margin: '0 auto', display: 'block', marginBottom: '1.5rem' }}
+              style={{ height: '280px', width: 'auto', margin: '0 auto', display: 'block', marginBottom: '2rem' }}
             />
           </div>
           
@@ -211,11 +211,13 @@ export default function HomePage() {
       <footer style={{ backgroundColor: '#1f2937', color: 'white', padding: '3rem 2rem' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-            <img 
-              src="/NestMates_App_Icon.png" 
-              alt="NestMates Logo" 
-              style={{ height: '32px', width: 'auto', filter: 'brightness(0) invert(1)' }}
-            />
+            <div style={{ 
+              fontSize: '1.5rem', 
+              fontWeight: 'bold', 
+              color: '#4ECDC4' 
+            }}>
+              NestMates
+            </div>
           </div>
           <p style={{ color: '#9ca3af' }}>
             Helping empty nester couples rediscover their love through AI-powered local experiences.
