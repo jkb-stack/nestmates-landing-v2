@@ -83,7 +83,14 @@ export default function Dashboard() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #fff7ed 0%, #f0fdfa 100%)',
+      background: `
+        linear-gradient(135deg, rgba(255, 247, 237, 0.95) 0%, rgba(240, 253, 250, 0.95) 100%),
+        url('/NestMates_Logo_Tagline.png')
+      `,
+      backgroundSize: '40%, cover',
+      backgroundPosition: 'center center',
+      backgroundRepeat: 'no-repeat',
+      backgroundAttachment: 'fixed',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       {/* Header */}
