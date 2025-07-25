@@ -65,17 +65,18 @@ export default function OnboardingPage() {
     try {
       const { supabase } = await import('../supabase')
       
-      // Save user preferences to database
+      // Save user preferences to existing profiles table
       const { error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .upsert({
-          user_id: user.id,
-          city: formData.city,
-          state: formData.state,
-          interests: formData.interests,
+          id: user.id,
+          email: user.email,
+          first_name: user.user_metadata?.first_name,
+          location_city: formData.city,
+          location_state: formData.state,
+          interests: formData.interests.join(','),
           budget: formData.budget,
-          onboarding_completed: true,
-          updated_at: new Date().toISOString()
+          onboarding_completed: true
         })
 
       if (error) {
