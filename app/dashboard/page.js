@@ -84,14 +84,16 @@ export default function Dashboard() {
     <div style={{
       minHeight: '100vh',
       background: `
-        linear-gradient(135deg, rgba(255, 247, 237, 0.95) 0%, rgba(240, 253, 250, 0.95) 100%),
-        url('/NestMates_Logo_Tagline.png')
+        linear-gradient(135deg, rgba(255, 247, 237, 0.92) 0%, rgba(240, 253, 250, 0.92) 100%),
+        url('/sideimagehands.jpg'),
+        url('/couple-embracing.jpg')
       `,
-      backgroundSize: '40%, cover',
-      backgroundPosition: 'center center',
-      backgroundRepeat: 'no-repeat',
-      backgroundAttachment: 'fixed',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      backgroundSize: 'cover, 25%, 20%',
+      backgroundPosition: 'center, left center, right center',
+      backgroundRepeat: 'no-repeat, no-repeat, no-repeat',
+      backgroundAttachment: 'fixed, fixed, fixed',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      position: 'relative'
     }}>
       {/* Header */}
       <header style={{
