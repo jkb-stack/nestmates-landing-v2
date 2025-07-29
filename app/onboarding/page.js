@@ -62,36 +62,50 @@ export default function OnboardingPage() {
   }
 
   const handleComplete = async () => {
-    try {
-      const { supabase } = await import('../supabase')
-      
-      // Save user preferences to existing profiles table
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email,
-          first_name: user.user_metadata?.first_name,
-          location_city: formData.city,
-          location_state: formData.state,
-          interests: formData.interests.join(','),
-          budget: formData.budget,
-          onboarding_completed: true
-        })
-
-      if (error) {
-        console.error('Error saving profile:', error)
-        alert('Error saving profile. Please try again.')
-        return
-      }
-
-      // Redirect to dashboard
-      window.location.href = '/dashboard'
-    } catch (err) {
-      console.error('Error completing onboarding:', err)
-      alert('Error completing setup. Please try again.')
+  try {
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    
+    if (userError || !user) {
+      console.log('User error:', userError)
+      setError('User not authenticated. Please log in again.')
+      return
     }
+
+    console.log('User:', user.id) // Debug log
+    console.log('Form data:', formData) // Debug log
+
+    // Save to database
+    const profileData = {
+      id: user.id,
+      email: user.email,
+      location_city: formData.city,
+      location_state: formData.state,
+      interests: formData.interests.join(','), // Convert to string
+      budget: formData.budget,
+      onboarding_completed: true
+    }
+
+    console.log('Saving:', profileData) // Debug log
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert(profileData)
+
+    if (error) {
+      console.log('Database error:', error) // This will show the real error!
+      setError(`Database error: ${error.message}`)
+      return
+    }
+
+    console.log('Success:', data)
+    setSuccess(true)
+    
+  } catch (err) {
+    console.log('Catch error:', err)
+    setError(`Error: ${err.message}`)
   }
+}
 
   if (loading) {
     return (
