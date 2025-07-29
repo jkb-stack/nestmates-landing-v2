@@ -1,435 +1,289 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-export default function Dashboard() {
+export default function DashboardPage() {
   const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [todayInsight, setTodayInsight] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [generatingInsight, setGeneratingInsight] = useState(false)
   const [partnerCode, setPartnerCode] = useState('')
-  const [hasPartner, setHasPartner] = useState(false)
-  const [showInviteCode, setShowInviteCode] = useState(false)
+  const [partnerInput, setPartnerInput] = useState('')
 
   useEffect(() => {
-    async function getUser() {
-      try {
-        const { supabase } = await import('../supabase')
-        
-        // Get current user
-        const { data: { user }, error } = await supabase.auth.getUser()
-        
-        if (error || !user) {
-          // Redirect to login if not authenticated
-          window.location.href = '/login'
-          return
-        }
-        
-        setUser(user)
-        
-        // Generate a simple partner code based on user ID
-        const code = `NEST-${user.id.slice(-4).toUpperCase()}`
-        setPartnerCode(code)
-        
-      } catch (err) {
-        console.error('Error getting user:', err)
-        window.location.href = '/login'
-      }
-      
-      setLoading(false)
-    }
-    
-    getUser()
+    loadUserAndInsight()
   }, [])
 
-  const handleLogout = async () => {
+  const loadUserAndInsight = async () => {
     try {
       const { supabase } = await import('../supabase')
-      await supabase.auth.signOut()
-      window.location.href = '/'
-    } catch (err) {
-      console.error('Error logging out:', err)
+      
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        window.location.href = '/login'
+        return
+      }
+      setUser(user)
+
+      // Get user profile
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      if (profileData) {
+        setProfile(profileData)
+        
+        // Check if user completed onboarding
+        if (!profileData.onboarding_completed) {
+          window.location.href = '/onboarding'
+          return
+        }
+      }
+
+      // Get today's insight
+      const today = new Date().toISOString().split('T')[0]
+      const { data: insightData } = await supabase
+        .from('daily_insights')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('insight_date', today)
+        .single()
+
+      if (insightData) {
+        setTodayInsight(insightData)
+      } else {
+        // Generate today's insight
+        await generateTodayInsight(user.id, profileData)
+      }
+
+    } catch (error) {
+      console.error('Error loading dashboard:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const copyPartnerCode = () => {
-    navigator.clipboard.writeText(partnerCode)
-    alert('Partner code copied to clipboard!')
+  const generateTodayInsight = async (userId, userProfile) => {
+    setGeneratingInsight(true)
+    try {
+      const { supabase } = await import('../supabase')
+
+      // Call our AI API
+      const response = await fetch('/api/generate-insight', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userPreferences: {
+            city: userProfile.location_city,
+            state: userProfile.location_state,
+            interests: userProfile.interests,
+            budget: userProfile.budget
+          }
+        })
+      })
+
+      const aiInsight = await response.json()
+
+      if (aiInsight.error) {
+        throw new Error(aiInsight.error)
+      }
+
+      // Save to database
+      const today = new Date().toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('daily_insights')
+        .insert({
+          user_id: userId,
+          insight_date: today,
+          title: aiInsight.title,
+          content: aiInsight.content,
+          exercise: aiInsight.exercise,
+          psychology_source: aiInsight.psychology_source,
+          coins_awarded: 50,
+          completed: false
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setTodayInsight(data)
+
+    } catch (error) {
+      console.error('Error generating insight:', error)
+    } finally {
+      setGeneratingInsight(false)
+    }
+  }
+
+  const completeExercise = async () => {
+    try {
+      const { supabase } = await import('../supabase')
+      
+      await supabase
+        .from('daily_insights')
+        .update({ completed: true })
+        .eq('id', todayInsight.id)
+
+      setTodayInsight(prev => ({ ...prev, completed: true }))
+      
+      // Could add coins to user profile here
+      alert('🎉 Great job! You earned 50 Connection Coins!')
+
+    } catch (error) {
+      console.error('Error completing exercise:', error)
+    }
+  }
+
+  const handleLogout = async () => {
+    const { supabase } = await import('../supabase')
+    await supabase.auth.signOut()
+    window.location.href = '/'
   }
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #fff7ed 0%, #f0fdfa 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
-      }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff8e1' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            border: '4px solid #e5e7eb',
-            borderTop: '4px solid #ea580c',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 1rem'
-          }}></div>
-          <p style={{ color: '#6b7280' }}>Loading your dashboard...</p>
+          <div style={{ fontSize: '32px', marginBottom: '16px' }}>🔄</div>
+          <p style={{ fontSize: '18px', color: '#6b7280' }}>Loading your personalized insights...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: `
-        linear-gradient(135deg, rgba(255, 247, 237, 0.92) 0%, rgba(240, 253, 250, 0.92) 100%),
-        url('/sideimagehands.jpg'),
-        url('/couple-embracing.jpg')
-      `,
-      backgroundSize: 'cover, 25%, 20%',
-      backgroundPosition: 'center, left center, right center',
-      backgroundRepeat: 'no-repeat, no-repeat, no-repeat',
-      backgroundAttachment: 'fixed, fixed, fixed',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      position: 'relative'
+    <div style={{ 
+      minHeight: '100vh', 
+      background: 'linear-gradient(135deg, rgba(255, 248, 225, 0.92), rgba(78, 205, 196, 0.92))',
+      backgroundImage: `url(/sideimagehands.jpg), url(/couple-embracing.jpg)`,
+      backgroundPosition: 'left center, right center',
+      backgroundRepeat: 'no-repeat, no-repeat',
+      backgroundSize: '25% auto, 20% auto',
+      backgroundAttachment: 'fixed',
+      padding: '20px'
     }}>
+      
       {/* Header */}
-      <header style={{
-        backgroundColor: 'white',
-        padding: '1rem 2rem',
-        borderBottom: '1px solid #e5e7eb',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-      }}>
-        <div style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <img 
-              src="/NestMates_App_Icon.png" 
-              alt="NestMates" 
-              style={{ height: '40px', width: 'auto' }}
-            />
-            <span style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
-              Dashboard
-            </span>
-          </div>
-          <button
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', maxWidth: '1200px', margin: '0 auto 30px auto' }}>
+        <img src="/NestMates_App_Icon.png" alt="NestMates" style={{ height: '56px' }} />
+        <div style={{ display: 'flex', gap: '15px' }}>
+          <span style={{ color: '#1f2937', fontSize: '16px', fontWeight: '500' }}>Welcome, {profile?.first_name || user?.email}</span>
+          <button 
             onClick={handleLogout}
-            style={{
-              backgroundColor: '#6b7280',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.375rem',
-              border: 'none',
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#4b5563'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#6b7280'}
+            style={{ color: '#ef4444', fontSize: '16px', fontWeight: '500', background: 'none', border: 'none', cursor: 'pointer' }}
           >
             Logout
           </button>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <main style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-        {/* Welcome Section */}
-        <div style={{
-          backgroundColor: 'white',
-          padding: '2rem',
-          borderRadius: '1rem',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-          marginBottom: '2rem'
-        }}>
-          <h1 style={{
-            fontSize: '2rem',
-            fontWeight: 'bold',
-            color: '#1f2937',
-            marginBottom: '0.5rem'
-          }}>
-            Welcome back, {user?.user_metadata?.first_name || user?.email?.split('@')[0]}! 👋
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '1.125rem' }}>
-            Ready to rediscover your relationship? Let's start by connecting with your partner.
-          </p>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem' }}>
-          {/* Partner Connection */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '1rem',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
-          }}>
-            <h2 style={{
-              fontSize: '1.5rem',
-              fontWeight: 'bold',
-              color: '#1f2937',
-              marginBottom: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              💕 Connect with Your Partner
-            </h2>
-            
-            {!hasPartner ? (
-              <div>
-                <p style={{ color: '#6b7280', marginBottom: '1.5rem' }}>
-                  Share your partner code with your loved one so they can join your NestMates journey.
-                </p>
-                
-                <div style={{
-                  backgroundColor: '#f3f4f6',
-                  padding: '1rem',
-                  borderRadius: '0.5rem',
-                  marginBottom: '1rem'
-                }}>
-                  <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>
-                    Your Partner Code:
-                  </p>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    <span style={{
-                      fontSize: '1.25rem',
-                      fontWeight: 'bold',
-                      color: '#ea580c',
-                      fontFamily: 'monospace'
-                    }}>
-                      {partnerCode}
-                    </span>
-                    <button
-                      onClick={copyPartnerCode}
-                      style={{
-                        backgroundColor: '#ea580c',
-                        color: 'white',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        border: 'none',
-                        fontSize: '0.75rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.5rem' }}>
-                    Or enter your partner's code:
-                  </p>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input
-                      type="text"
-                      placeholder="NEST-XXXX"
-                      style={{
-                        flex: 1,
-                        padding: '0.5rem',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '0.375rem',
-                        fontSize: '0.875rem'
-                      }}
-                    />
-                    <button style={{
-                      backgroundColor: '#0d9488',
-                      color: 'white',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '0.375rem',
-                      border: 'none',
-                      fontSize: '0.875rem',
-                      cursor: 'pointer'
-                    }}>
-                      Connect
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{
-                  backgroundColor: '#fef3c7',
-                  padding: '1rem',
-                  borderRadius: '0.5rem',
-                  border: '1px solid #fbbf24'
-                }}>
-                  <p style={{ fontSize: '0.875rem', color: '#92400e' }}>
-                    💡 <strong>Tip:</strong> Send your partner code via text or email. Once they join, you'll both share the same daily insights and activity recommendations!
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div style={{
-                textAlign: 'center',
-                padding: '2rem',
-                backgroundColor: '#f0fdf4',
-                borderRadius: '0.5rem',
-                border: '1px solid #bbf7d0'
-              }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❤️</div>
-                <h3 style={{ color: '#059669', marginBottom: '0.5rem' }}>Connected!</h3>
-                <p style={{ color: '#065f46' }}>You and your partner are ready to start your journey together.</p>
-              </div>
-            )}
+      <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+        
+        {/* Today's AI Insight */}
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ fontSize: '24px', marginRight: '12px' }}>🧠</div>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Today's Relationship Insight</h2>
           </div>
 
-          {/* Today's Insight */}
-          <div style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '1rem',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
-          }}>
-            <h2 style={{
-              fontSize: '1.5rem',
-              fontWeight: 'bold',
-              color: '#1f2937',
-              marginBottom: '1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              🧠 Today's Relationship Insight
-            </h2>
-            
-            <div style={{
-              backgroundColor: '#faf5ff',
-              padding: '1.5rem',
-              borderRadius: '0.5rem',
-              border: '1px solid #e9d5ff',
-              marginBottom: '1rem'
-            }}>
-              <h3 style={{
-                fontSize: '1.125rem',
-                fontWeight: '600',
-                color: '#7c3aed',
-                marginBottom: '0.75rem'
-              }}>
-                The Neuroscience of New Experiences
-              </h3>
-              <p style={{ color: '#6b46c1', lineHeight: '1.6', marginBottom: '1rem' }}>
-                Research from Stanford University shows that when couples try new activities together, 
-                their brains release dopamine and strengthen neural pathways associated with bonding and pleasure.
-              </p>
-              <p style={{ color: '#7c3aed', fontWeight: '500' }}>
-                Today's Challenge: Plan one activity you've never done together before.
-              </p>
+          {generatingInsight ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '32px', marginBottom: '16px' }}>✨</div>
+              <p style={{ color: '#6b7280', fontSize: '16px' }}>Creating your personalized insight...</p>
+              <div style={{ width: '40px', height: '40px', border: '4px solid #fed7aa', borderTop: '4px solid #f97316', borderRadius: '50%', margin: '20px auto', animation: 'spin 1s linear infinite' }}></div>
+            </div>
+          ) : todayInsight ? (
+            <div>
+              <h3 style={{ fontSize: '20px', fontWeight: '600', color: '#f97316', marginBottom: '15px' }}>{todayInsight.title}</h3>
+              
+              <div style={{ color: '#374151', lineHeight: '1.6', marginBottom: '20px', fontSize: '16px' }}>
+                {todayInsight.content.split('\n').map((paragraph, index) => (
+                  <p key={index} style={{ marginBottom: '12px' }}>{paragraph}</p>
+                ))}
+              </div>
+
+              <div style={{ backgroundColor: '#fef3c7', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#92400e', marginBottom: '10px' }}>Today's Challenge:</h4>
+                <p style={{ color: '#92400e', fontSize: '15px', margin: 0 }}>{todayInsight.exercise}</p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <small style={{ color: '#6b7280', fontSize: '12px' }}>Based on: {todayInsight.psychology_source}</small>
+                
+                {!todayInsight.completed ? (
+                  <button 
+                    onClick={completeExercise}
+                    style={{ backgroundColor: '#10b981', color: 'white', padding: '10px 20px', borderRadius: '8px', border: 'none', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Complete Challenge (+50 coins)
+                  </button>
+                ) : (
+                  <div style={{ color: '#10b981', fontSize: '14px', fontWeight: '600' }}>✅ Completed! +50 coins</div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <p style={{ color: '#6b7280' }}>No insight available. Please try refreshing the page.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Partner Connection */}
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ fontSize: '24px', marginRight: '12px' }}>💕</div>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Partner Connection</h2>
+          </div>
+
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <div style={{ backgroundColor: '#fef3c7', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#92400e', marginBottom: '10px' }}>Your Partner Code</h3>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#f97316', marginBottom: '10px' }}>NEST-{user?.id.slice(-4).toUpperCase()}</div>
+              <p style={{ color: '#92400e', fontSize: '14px' }}>Share this code with your partner</p>
             </div>
 
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '1rem',
-              backgroundColor: '#f9fafb',
-              borderRadius: '0.5rem'
-            }}>
-              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                Connection Coins Earned: 50
-              </span>
-              <button style={{
-                backgroundColor: '#ea580c',
-                color: 'white',
-                padding: '0.5rem 1rem',
-                borderRadius: '0.375rem',
-                border: 'none',
-                fontSize: '0.875rem',
-                cursor: 'pointer'
-              }}>
-                Mark Complete
+            <div style={{ marginBottom: '20px' }}>
+              <input
+                type="text"
+                placeholder="Enter your partner's code"
+                value={partnerInput}
+                onChange={(e) => setPartnerInput(e.target.value)}
+                style={{ width: '100%', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', fontSize: '16px', marginBottom: '10px' }}
+              />
+              <button 
+                style={{ width: '100%', backgroundColor: '#f97316', color: 'white', padding: '12px', borderRadius: '8px', border: 'none', fontSize: '16px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                Connect with Partner
               </button>
             </div>
-
-            <p style={{
-              fontSize: '0.75rem',
-              color: '#9ca3af',
-              marginTop: '1rem',
-              fontStyle: 'italic'
-            }}>
-              Source: Journal of Personality and Social Psychology, 2024
-            </p>
           </div>
         </div>
+      </div>
 
-        {/* Quick Actions */}
-        <div style={{
-          backgroundColor: 'white',
-          padding: '2rem',
-          borderRadius: '1rem',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-          marginTop: '2rem'
-        }}>
-          <h2 style={{
-            fontSize: '1.5rem',
-            fontWeight: 'bold',
-            color: '#1f2937',
-            marginBottom: '1rem'
-          }}>
-            🎯 Quick Actions
-          </h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: '1rem'
-          }}>
-            <button style={{
-              padding: '1rem',
-              backgroundColor: '#fef3c7',
-              border: '1px solid #fbbf24',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              textAlign: 'left'
-            }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📅</div>
-              <div style={{ fontWeight: '600', color: '#92400e' }}>Plan Date Night</div>
-              <div style={{ fontSize: '0.875rem', color: '#a16207' }}>AI recommendations</div>
-            </button>
-            
-            <button style={{
-              padding: '1rem',
-              backgroundColor: '#ecfdf5',
-              border: '1px solid #bbf7d0',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              textAlign: 'left'
-            }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>💬</div>
-              <div style={{ fontWeight: '600', color: '#065f46' }}>Communication Quiz</div>
-              <div style={{ fontSize: '0.875rem', color: '#047857' }}>Improve understanding</div>
-            </button>
-            
-            <button style={{
-              padding: '1rem',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              textAlign: 'left'
-            }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📍</div>
-              <div style={{ fontWeight: '600', color: '#991b1b' }}>Local Events</div>
-              <div style={{ fontSize: '0.875rem', color: '#dc2626' }}>Discover nearby</div>
-            </button>
-          </div>
-        </div>
-      </main>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
+      {/* Quick Actions */}
+      <div style={{ maxWidth: '1200px', margin: '30px auto 0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+        <button style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', marginBottom: '10px' }}>🎯</div>
+          <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>Local Activities</div>
+        </button>
+        
+        <button style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', marginBottom: '10px' }}>📊</div>
+          <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>Progress Tracking</div>
+        </button>
+        
+        <button style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', marginBottom: '10px' }}>⚙️</div>
+          <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>Settings</div>
+        </button>
+      </div>
     </div>
   )
 }
