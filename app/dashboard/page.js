@@ -376,9 +376,12 @@ export default function DashboardPage() {
 
       {/* Quick Actions */}
       <div style={{ maxWidth: '1400px', margin: '25px auto 0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px' }}>
-        <button style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}>
-          <div style={{ fontSize: '20px', marginBottom: '8px' }}>📍</div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>More Local Ideas</div>
+        <button 
+          onClick={() => window.location.href = '/conversations'}
+          style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}
+        >
+          <div style={{ fontSize: '20px', marginBottom: '8px' }}>💬</div>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>Conversation Starters</div>
         </button>
         
         <button 
