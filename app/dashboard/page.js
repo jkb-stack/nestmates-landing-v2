@@ -381,7 +381,10 @@ export default function DashboardPage() {
           <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>More Local Ideas</div>
         </button>
         
-        <button style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}>
+        <button 
+          onClick={() => window.location.href = '/progress'}
+          style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}
+        >
           <div style={{ fontSize: '20px', marginBottom: '8px' }}>📊</div>
           <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>Progress</div>
         </button>
