@@ -2,16 +2,28 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request) {
   try {
-    const { userId, userPreferences, category = 'reconnection', difficulty = 'medium' } = await request.json()
+    console.log('=== Conversation API Debug ===')
     
-    // Import Supabase
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    )
+    // Step 1: Parse request
+    const body = await request.json()
+    console.log('1. Request body:', body)
+    
+    const { userId, userPreferences, category = 'reconnection', difficulty = 'medium' } = body
+    console.log('2. Parsed data:', { userId, userPreferences, category, difficulty })
 
-    // Generate questions using OpenAI
+    // Step 2: Check environment variables
+    console.log('3. Environment check:')
+    console.log('   OPENAI_API_KEY exists:', !!process.env.OPENAI_API_KEY)
+    console.log('   SUPABASE_URL exists:', !!process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('   SUPABASE_KEY exists:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OpenAI API key is missing')
+    }
+
+    // Step 3: Try OpenAI API call
+    console.log('4. Calling OpenAI API...')
+    
     const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -23,115 +35,114 @@ export async function POST(request) {
         messages: [
           {
             role: "system",
-            content: `You are a relationship expert for empty nest couples. Create thoughtful conversation starters that help couples reconnect after their children have left home.`
+            content: "You are a relationship expert. Create conversation starters for couples."
           },
           {
             role: "user",
-            content: `Create 5 conversation starters for empty nester couples in ${userPreferences.city}, ${userPreferences.state}. 
-
-Category: ${category}
-Difficulty: ${difficulty}
-Interests: ${userPreferences.interests}
-
-Format as JSON:
+            content: `Create 3 simple conversation questions for couples about ${category}. Return valid JSON in this exact format:
 {
   "questions": [
     {
-      "question": "Main question text",
-      "followUp": "Optional follow-up question",
-      "explanation": "Why this question helps relationships",
+      "question": "What's your favorite memory from this year?",
+      "followUp": "What made that moment special?",
+      "explanation": "Sharing positive memories strengthens emotional bonds.",
       "difficulty": "${difficulty}"
     }
   ],
   "category": "${category}",
-  "categoryDescription": "Brief description"
-}
-
-Make questions meaningful and designed to bring couples closer together.`
+  "categoryDescription": "Questions about ${category}"
+}`
           }
         ],
-        max_tokens: 800,
-        temperature: 0.8
+        max_tokens: 600,
+        temperature: 0.7
       })
     })
 
-    const aiData = await aiResponse.json()
+    console.log('5. OpenAI Response status:', aiResponse.status)
     
-    if (!aiData.choices || !aiData.choices[0]) {
-      throw new Error('No response from OpenAI')
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text()
+      console.log('   OpenAI Error:', errorText)
+      throw new Error(`OpenAI API error: ${aiResponse.status}`)
     }
 
-    const conversationData = JSON.parse(aiData.choices[0].message.content)
+    const aiData = await aiResponse.json()
+    console.log('6. OpenAI Response data:', aiData)
 
-    // Save to database
-    const today = new Date().toISOString().split('T')[0]
-    const { data, error } = await supabase
-      .from('conversation_starters')
-      .upsert({
-        user_id: userId,
-        generated_date: today,
-        category: category,
-        questions: conversationData.questions,
-        difficulty_level: difficulty,
-        relationship_stage: 'rediscovering',
-        used_questions: []
+    if (!aiData.choices || !aiData.choices[0]) {
+      throw new Error('No choices in OpenAI response')
+    }
+
+    // Step 4: Parse AI response
+    let conversationData
+    try {
+      conversationData = JSON.parse(aiData.choices[0].message.content)
+      console.log('7. Parsed conversation data:', conversationData)
+    } catch (parseError) {
+      console.log('   JSON Parse Error:', parseError)
+      console.log('   Raw content:', aiData.choices[0].message.content)
+      throw new Error('Failed to parse AI response as JSON')
+    }
+
+    // Step 5: Try database save
+    console.log('8. Attempting database save...')
+    
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      )
+
+      const today = new Date().toISOString().split('T')[0]
+      console.log('   Today:', today)
+      console.log('   User ID:', userId)
+
+      const { data, error } = await supabase
+        .from('conversation_starters')
+        .upsert({
+          user_id: userId,
+          generated_date: today,
+          category: category,
+          questions: conversationData.questions,
+          difficulty_level: difficulty,
+          relationship_stage: 'rediscovering'
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.log('   Database error:', error)
+        throw new Error(`Database error: ${error.message}`)
+      }
+
+      console.log('9. Database save successful:', data)
+
+      return NextResponse.json({
+        success: true,
+        conversations: conversationData,
+        saved: data
       })
-      .select()
-      .single()
 
-    if (error) throw error
-
-    return NextResponse.json({
-      success: true,
-      conversations: conversationData,
-      saved: data
-    })
+    } catch (dbError) {
+      console.log('   Database operation failed:', dbError)
+      throw dbError
+    }
 
   } catch (error) {
-    console.error('Conversation generation error:', error)
+    console.error('=== API Error ===', error)
     return NextResponse.json({ 
       error: 'Failed to generate conversation starters',
-      details: error.message 
+      details: error.message,
+      step: 'Check server logs for details'
     }, { status: 500 })
   }
 }
 
 export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-    const category = searchParams.get('category') || 'reconnection'
-
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    )
-
-    const today = new Date().toISOString().split('T')[0]
-
-    const { data, error } = await supabase
-      .from('conversation_starters')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('generated_date', today)
-      .eq('category', category)
-      .single()
-
-    if (error && error.code !== 'PGRST116') {
-      throw error
-    }
-
-    return NextResponse.json({
-      success: true,
-      conversations: data || null
-    })
-
-  } catch (error) {
-    console.error('Get conversations error:', error)
-    return NextResponse.json({ 
-      error: 'Failed to get conversation starters',
-      details: error.message 
-    }, { status: 500 })
-  }
+  return NextResponse.json({
+    message: 'Conversation API is working',
+    timestamp: new Date().toISOString()
+  })
 }
