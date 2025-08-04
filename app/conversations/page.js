@@ -9,7 +9,7 @@ export default function ConversationsPage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState('medium')
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [expandedQuestion, setExpandedQuestion] = useState(null)
+  const [error, setError] = useState('')
 
   const categories = [
     { id: 'reconnection', label: 'Reconnection', icon: '💕', desc: 'Rediscover each other' },
@@ -20,21 +20,9 @@ export default function ConversationsPage() {
     { id: 'future', label: 'Our Future', icon: '🚀', desc: 'What comes next' }
   ]
 
-  const difficulties = [
-    { id: 'light', label: 'Light & Easy', desc: 'Comfortable topics' },
-    { id: 'medium', label: 'Meaningful', desc: 'Thought-provoking' },
-    { id: 'deep', label: 'Deep & Personal', desc: 'Vulnerable sharing' }
-  ]
-
   useEffect(() => {
     loadUserData()
   }, [])
-
-  useEffect(() => {
-    if (user && profile) {
-      loadConversations()
-    }
-  }, [selectedCategory, user, profile])
 
   const loadUserData = async () => {
     try {
@@ -59,78 +47,76 @@ export default function ConversationsPage() {
 
     } catch (error) {
       console.error('Error loading user data:', error)
+      setError('Failed to load user data')
     } finally {
       setLoading(false)
     }
   }
 
-  const loadConversations = async () => {
-    try {
-      const response = await fetch(`/api/generate-conversations?userId=${user.id}&category=${selectedCategory}`)
-      const data = await response.json()
+  const generateConversations = async () => {
+    if (!user || !profile) {
+      setError('Missing user information')
+      return
+    }
 
-      if (data.success && data.conversations) {
-        setConversations(data.conversations)
-      } else {
-        // Generate new conversations if none exist for today
-        await generateConversations()
+    setGenerating(true)
+    setError('')
+    
+    try {
+      console.log('Starting conversation generation...')
+      console.log('User ID:', user.id)
+      console.log('Category:', selectedCategory)
+      console.log('Profile:', profile)
+
+      const requestBody = {
+        userId: user.id,
+        userPreferences: {
+          city: profile.location_city || 'Unknown',
+          state: profile.location_state || 'Unknown',
+          interests: profile.interests || 'general',
+          budget: profile.budget || 'moderate'
+        },
+        category: selectedCategory,
+        difficulty: selectedDifficulty
       }
 
-    } catch (error) {
-      console.error('Error loading conversations:', error)
-    }
-  }
+      console.log('Request body:', requestBody)
 
-  const generateConversations = async () => {
-    setGenerating(true)
-    try {
       const response = await fetch('/api/generate-conversations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          userId: user.id,
-          userPreferences: {
-            city: profile.location_city,
-            state: profile.location_state,
-            interests: profile.interests,
-            budget: profile.budget
-          },
-          category: selectedCategory,
-          difficulty: selectedDifficulty
-        })
+        body: JSON.stringify(requestBody)
       })
 
-      const data = await response.json()
+      console.log('Response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Response error:', errorText)
+        throw new Error(`Server error: ${response.status}`)
+      }
 
-      if (data.success) {
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      if (data.success && data.conversations) {
         setConversations(data.conversations)
+        console.log('Conversations set successfully')
+      } else {
+        throw new Error('No conversation data received')
       }
 
     } catch (error) {
-      console.error('Error generating conversations:', error)
+      console.error('Generation error:', error)
+      setError(`Failed to generate conversations: ${error.message}`)
     } finally {
       setGenerating(false)
-    }
-  }
-
-  const markQuestionUsed = async (questionIndex) => {
-    if (!conversations?.saved?.id) return
-
-    try {
-      await fetch('/api/generate-conversations', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversationId: conversations.saved.id,
-          questionIndex: questionIndex
-        })
-      })
-    } catch (error) {
-      console.error('Error marking question as used:', error)
     }
   }
 
@@ -195,25 +181,26 @@ export default function ConversationsPage() {
           </div>
 
           {/* Difficulty Selection */}
-          <div>
+          <div style={{ marginBottom: '20px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937', marginBottom: '12px' }}>Conversation Depth</h3>
             <div style={{ display: 'flex', gap: '10px' }}>
-              {difficulties.map(difficulty => (
+              {['light', 'medium', 'deep'].map(difficulty => (
                 <button
-                  key={difficulty.id}
-                  onClick={() => setSelectedDifficulty(difficulty.id)}
+                  key={difficulty}
+                  onClick={() => setSelectedDifficulty(difficulty)}
                   style={{
                     padding: '10px 20px',
                     borderRadius: '8px',
-                    border: `2px solid ${selectedDifficulty === difficulty.id ? '#f97316' : '#e5e7eb'}`,
-                    backgroundColor: selectedDifficulty === difficulty.id ? '#fed7aa' : 'white',
+                    border: `2px solid ${selectedDifficulty === difficulty ? '#f97316' : '#e5e7eb'}`,
+                    backgroundColor: selectedDifficulty === difficulty ? '#fed7aa' : 'white',
                     cursor: 'pointer',
                     fontSize: '13px',
                     fontWeight: '600',
-                    color: '#1f2937'
+                    color: '#1f2937',
+                    textTransform: 'capitalize'
                   }}
                 >
-                  {difficulty.label}
+                  {difficulty}
                 </button>
               ))}
             </div>
@@ -223,7 +210,6 @@ export default function ConversationsPage() {
             onClick={generateConversations}
             disabled={generating}
             style={{ 
-              marginTop: '20px',
               backgroundColor: '#f97316', 
               color: 'white', 
               padding: '12px 24px', 
@@ -237,6 +223,12 @@ export default function ConversationsPage() {
           >
             {generating ? 'Creating Questions...' : 'Generate New Questions'}
           </button>
+
+          {error && (
+            <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#fee2e2', borderRadius: '8px', color: '#dc2626' }}>
+              <strong>Error:</strong> {error}
+            </div>
+          )}
         </div>
 
         {/* Questions Display */}
@@ -249,82 +241,48 @@ export default function ConversationsPage() {
           </div>
         ) : conversations?.questions ? (
           <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '25px' }}>
-              <div style={{ fontSize: '24px', marginRight: '12px' }}>
-                {categories.find(c => c.id === selectedCategory)?.icon}
-              </div>
-              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>
-                {categories.find(c => c.id === selectedCategory)?.label} Questions
-              </h2>
-            </div>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', marginBottom: '25px' }}>
+              {categories.find(c => c.id === selectedCategory)?.icon} {categories.find(c => c.id === selectedCategory)?.label} Questions
+            </h2>
 
             <div style={{ display: 'grid', gap: '20px' }}>
               {conversations.questions.map((q, index) => (
                 <div key={index} style={{ 
                   border: '2px solid #e5e7eb', 
                   borderRadius: '12px', 
-                  overflow: 'hidden',
-                  transition: 'all 0.2s',
-                  backgroundColor: expandedQuestion === index ? '#fef3c7' : 'white'
+                  padding: '20px',
+                  backgroundColor: 'white'
                 }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '10px' }}>
+                    "{q.question}"
+                  </h3>
+                  
+                  {q.followUp && (
+                    <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px', fontStyle: 'italic' }}>
+                      Follow-up: {q.followUp}
+                    </p>
+                  )}
+                  
+                  <p style={{ fontSize: '13px', color: '#92400e', marginBottom: '15px' }}>
+                    💡 {q.explanation}
+                  </p>
+                  
                   <button
-                    onClick={() => setExpandedQuestion(expandedQuestion === index ? null : index)}
                     style={{
-                      width: '100%',
-                      padding: '20px',
-                      textAlign: 'left',
+                      backgroundColor: '#10b981',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
                       border: 'none',
-                      backgroundColor: 'transparent',
-                      cursor: 'pointer',
-                      fontSize: '16px',
+                      fontSize: '12px',
                       fontWeight: '600',
-                      color: '#1f2937'
+                      cursor: 'pointer'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>"{q.question}"</span>
-                      <span style={{ fontSize: '20px', transform: expandedQuestion === index ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
-                        ↓
-                      </span>
-                    </div>
+                    ✅ We Discussed This
                   </button>
-
-                  {expandedQuestion === index && (
-                    <div style={{ padding: '0 20px 20px 20px', borderTop: '1px solid #e5e7eb' }}>
-                      {q.followUp && (
-                        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '12px', fontStyle: 'italic' }}>
-                          Follow-up: {q.followUp}
-                        </p>
-                      )}
-                      <p style={{ fontSize: '13px', color: '#92400e', marginBottom: '15px' }}>
-                        💡 {q.explanation}
-                      </p>
-                      <button
-                        onClick={() => markQuestionUsed(index)}
-                        style={{
-                          backgroundColor: '#10b981',
-                          color: 'white',
-                          padding: '8px 16px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✅ We Discussed This
-                      </button>
-                    </div>
-                  )}
                 </div>
               ))}
-            </div>
-
-            <div style={{ textAlign: 'center', marginTop: '25px', padding: '20px', backgroundColor: '#f0f9ff', borderRadius: '12px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#0369a1', marginBottom: '8px' }}>💡 Pro Tip</h3>
-              <p style={{ fontSize: '14px', color: '#0369a1', margin: 0 }}>
-                Save these questions in your phone and bring them to dinner tonight. Take turns asking each other and really listen to the answers!
-              </p>
             </div>
           </div>
         ) : (
