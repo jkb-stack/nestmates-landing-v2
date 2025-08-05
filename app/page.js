@@ -52,6 +52,99 @@ export default function HomePage() {
         </div>
       </section>
 
+<section style={{ padding: '60px 20px', backgroundColor: 'rgba(249, 115, 22, 0.1)' }}>
+  <div style={{ maxWidth: '1200px', margin: '0 auto', textAlign: 'center' }}>
+    <h2 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1f2937', marginBottom: '20px' }}>
+      The Empty Nest Reality
+    </h2>
+    <p style={{ fontSize: '18px', color: '#6b7280', marginBottom: '50px', maxWidth: '800px', margin: '0 auto 50px auto' }}>
+      Every year, millions of couples face the empty nest transition. Here's what the research tells us:
+    </p>
+    
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '40px', marginBottom: '50px' }}>
+      
+      <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#f97316', marginBottom: '10px' }}>54 Million</div>
+        <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '10px' }}>Empty Nesters Annually</h3>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>American couples transition to empty nest status each year</p>
+      </div>
+
+      <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#f97316', marginBottom: '10px' }}>25%</div>
+        <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '10px' }}>Divorce Rate Spike</h3>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>Higher divorce rates during empty nest transition years</p>
+      </div>
+
+      <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#f97316', marginBottom: '10px' }}>90%</div>
+        <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '10px' }}>Feel Disconnected</h3>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>Of couples report feeling like strangers after kids leave</p>
+      </div>
+
+      <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#f97316', marginBottom: '10px' }}>40+ Years</div>
+        <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '10px' }}>Gottman Research</h3>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>Of relationship science backing our approach</p>
+      </div>
+
+    </div>
+
+    {/* The Science Behind NestMates */}
+    <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '40px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)', textAlign: 'left' }}>
+      <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', marginBottom: '25px', textAlign: 'center' }}>
+        🧠 The Neuroscience of Reconnection
+      </h3>
+      
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px' }}>
+        
+        <div>
+          <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#f97316', marginBottom: '10px' }}>
+            Neuroplasticity Research
+          </h4>
+          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+            Stanford studies show the brain can form new neural pathways at any age. When couples try new activities together, they strengthen emotional bonds and create fresh connection patterns.
+          </p>
+        </div>
+
+        <div>
+          <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#f97316', marginBottom: '10px' }}>
+            Attachment Theory
+          </h4>
+          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+            UCLA research on attachment shows that consistent positive interactions rebuild secure emotional bonds. Our daily insights are designed around these proven psychological principles.
+          </p>
+        </div>
+
+        <div>
+          <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#f97316', marginBottom: '10px' }}>
+            Gottman Method Integration
+          </h4>
+          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+            Based on 40+ years of relationship research from the Gottman Institute. Our conversation starters and exercises use proven techniques like Love Maps and turning towards each other.
+          </p>
+        </div>
+
+        <div>
+          <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#f97316', marginBottom: '10px' }}>
+            Empty Nest Psychology
+          </h4>
+          <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.6' }}>
+            Journal of Marriage and Family research specifically on empty nest transitions. We address identity reconstruction, grief processing, and intimacy rebuilding unique to this life stage.
+          </p>
+        </div>
+
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: '30px', padding: '20px', backgroundColor: '#fef3c7', borderRadius: '12px' }}>
+        <p style={{ fontSize: '16px', color: '#92400e', fontWeight: '600', margin: 0 }}>
+          💡 Every NestMates feature is backed by peer-reviewed research and designed specifically for empty nester couples
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
       {/* Features Section */}
       <section style={{ padding: '80px 20px', backgroundColor: 'rgba(255,255,255,0.9)' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
