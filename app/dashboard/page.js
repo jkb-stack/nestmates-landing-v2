@@ -230,14 +230,13 @@ export default function DashboardPage() {
         <img src="/NestMates_App_Icon.png" alt="NestMates" style={{ height: '56px' }} />
         <div style={{ display: 'flex', gap: '15px' }}>
           <span style={{ color: '#1f2937', fontSize: '16px', fontWeight: '500' }}>Welcome, {profile?.first_name || user?.email}</span>
-          <button 
-            onClick={handleLogout}
-            style={{ color: '#ef4444', fontSize: '16px', fontWeight: '500', background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            Logout
-          </button>
-        </div>
-      </div>
+        <button 
+  onClick={() => window.location.href = '/local-activities'}
+  style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', cursor: 'pointer', textAlign: 'center' }}
+>
+  <div style={{ fontSize: '20px', marginBottom: '8px' }}>📍</div>
+  <div style={{ fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>More Local Ideas</div>
+</button>
 
       {/* Three Column Layout */}
       <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '25px' }}>
