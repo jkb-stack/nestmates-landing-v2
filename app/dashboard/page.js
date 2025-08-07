@@ -62,32 +62,47 @@ export default function DashboardPage() {
     try {
       const { supabase } = await import('../supabase')
       
-      // Get today's insight
-      const today = new Date().toISOString().split('T')[0]
+      // Get today's insight with better date handling
+      const today = new Date()
+      const todayString = today.getFullYear() + '-' + 
+        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(today.getDate()).padStart(2, '0')
+      
+      console.log('Looking for insight for date:', todayString)
+
       const { data: insightData } = await supabase
         .from('daily_insights')
         .select('*')
         .eq('user_id', userId)
-        .eq('insight_date', today)
+        .eq('insight_date', todayString)
         .single()
+
+      console.log('Found existing insight:', !!insightData)
 
       if (insightData) {
         setTodayInsight(insightData)
+        console.log('Using existing insight:', insightData.title)
       } else {
+        console.log('No insight found, generating new one')
         // Generate today's insight
         await generateTodayInsight(userId, userProfile)
       }
     } catch (error) {
       console.error('Error loading insight:', error)
+      // Try to generate new insight on error
+      await generateTodayInsight(userId, userProfile)
     }
   }
 
-  const generateTodayInsight = async (userId, userProfile) => {
+  const generateTodayInsight = async (userId, userProfile, forceNew = false) => {
+    console.log('Generating new insight, forceNew:', forceNew)
     setGeneratingInsight(true)
+    
     try {
       const { supabase } = await import('../supabase')
 
       // Call our AI API
+      console.log('Calling AI API for insight generation...')
       const response = await fetch('/api/generate-insight', {
         method: 'POST',
         headers: {
@@ -103,19 +118,28 @@ export default function DashboardPage() {
         })
       })
 
+      console.log('AI API response status:', response.status)
+
       const aiInsight = await response.json()
+      console.log('AI API response:', aiInsight)
 
       if (aiInsight.error) {
         throw new Error(aiInsight.error)
       }
 
-      // Save to database
-      const today = new Date().toISOString().split('T')[0]
+      // Save to database with proper date
+      const today = new Date()
+      const todayString = today.getFullYear() + '-' + 
+        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(today.getDate()).padStart(2, '0')
+
+      console.log('Saving insight to database for date:', todayString)
+
       const { data, error } = await supabase
         .from('daily_insights')
-        .insert({
+        .upsert({
           user_id: userId,
-          insight_date: today,
+          insight_date: todayString,
           title: aiInsight.title,
           content: aiInsight.content,
           exercise: aiInsight.exercise,
@@ -126,20 +150,29 @@ export default function DashboardPage() {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('Database save error:', error)
+        throw error
+      }
 
+      console.log('Successfully saved insight:', data)
       setTodayInsight(data)
 
     } catch (error) {
       console.error('Error generating insight:', error)
+      alert(`Error generating insight: ${error.message}`)
     } finally {
       setGeneratingInsight(false)
     }
   }
 
-  const generateDateRecommendations = async (userProfile) => {
+  const generateDateRecommendations = async (userProfile, forceNew = false) => {
+    console.log('Generating date recommendations, forceNew:', forceNew)
     setGeneratingDate(true)
+    
     try {
+      console.log('Calling date API with profile:', userProfile)
+      
       const response = await fetch('/api/generate-date', {
         method: 'POST',
         headers: {
@@ -155,16 +188,22 @@ export default function DashboardPage() {
         })
       })
 
+      console.log('Date API response status:', response.status)
+
       const dateData = await response.json()
+      console.log('Date API response:', dateData)
 
       if (dateData.error) {
         throw new Error(dateData.error)
       }
 
+      console.log('Setting date recommendations:', dateData.recommendations)
       setDateRecommendations(dateData.recommendations)
 
     } catch (error) {
       console.error('Error generating date recommendations:', error)
+      console.log('Using fallback date recommendation')
+      
       setDateRecommendations({
         primaryDate: {
           title: "Explore Your City Together",
@@ -177,6 +216,19 @@ export default function DashboardPage() {
     } finally {
       setGeneratingDate(false)
     }
+  }
+
+  // Add manual refresh functions
+  const refreshInsight = async () => {
+    if (!user || !profile) return
+    console.log('Manual insight refresh triggered')
+    await generateTodayInsight(user.id, profile, true)
+  }
+
+  const refreshDateRecommendations = async () => {
+    if (!profile) return
+    console.log('Manual date refresh triggered')
+    await generateDateRecommendations(profile, true)
   }
 
   const completeExercise = async () => {
@@ -293,9 +345,26 @@ export default function DashboardPage() {
             boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
             border: '1px solid rgba(255,255,255,0.2)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '20px', marginRight: '10px' }}>🌟</div>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Perfect Date Tonight</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ fontSize: '20px', marginRight: '10px' }}>🌟</div>
+                <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Perfect Date Tonight</h2>
+              </div>
+              <button 
+                onClick={refreshDateRecommendations}
+                disabled={generatingDate}
+                style={{ 
+                  fontSize: '20px', 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: generatingDate ? 'not-allowed' : 'pointer', 
+                  opacity: generatingDate ? 0.5 : 1,
+                  padding: '4px'
+                }}
+                title="Refresh date recommendations"
+              >
+                🔄
+              </button>
             </div>
 
             {generatingDate ? (
@@ -324,15 +393,17 @@ export default function DashboardPage() {
                     {dateRecommendations.primaryDate.totalCost}
                   </span>
                   <button 
-                    onClick={() => generateDateRecommendations(profile)}
+                    onClick={refreshDateRecommendations}
+                    disabled={generatingDate}
                     style={{ 
                       fontSize: '11px', 
                       color: '#f97316', 
                       background: 'none', 
                       border: 'none', 
-                      cursor: 'pointer', 
+                      cursor: generatingDate ? 'not-allowed' : 'pointer', 
                       textDecoration: 'underline',
-                      padding: '4px 8px'
+                      padding: '4px 8px',
+                      opacity: generatingDate ? 0.5 : 1
                     }}
                   >
                     Get new ideas
@@ -341,7 +412,22 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '20px' }}>
-                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading recommendations...</p>
+                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>No recommendations yet</p>
+                <button 
+                  onClick={refreshDateRecommendations}
+                  style={{ 
+                    backgroundColor: '#f97316', 
+                    color: 'white', 
+                    padding: '8px 16px', 
+                    borderRadius: '8px', 
+                    border: 'none', 
+                    fontSize: '13px', 
+                    fontWeight: '600', 
+                    cursor: 'pointer' 
+                  }}
+                >
+                  Generate Ideas
+                </button>
               </div>
             )}
           </div>
@@ -354,9 +440,26 @@ export default function DashboardPage() {
             boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
             border: '1px solid rgba(255,255,255,0.2)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '20px', marginRight: '10px' }}>🧠</div>
-              <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Today's Insight</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ fontSize: '20px', marginRight: '10px' }}>🧠</div>
+                <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Today's Insight</h2>
+              </div>
+              <button 
+                onClick={refreshInsight}
+                disabled={generatingInsight}
+                style={{ 
+                  fontSize: '20px', 
+                  background: 'none', 
+                  border: 'none', 
+                  cursor: generatingInsight ? 'not-allowed' : 'pointer', 
+                  opacity: generatingInsight ? 0.5 : 1,
+                  padding: '4px'
+                }}
+                title="Refresh today's insight"
+              >
+                🔄
+              </button>
             </div>
 
             {generatingInsight ? (
@@ -404,7 +507,26 @@ export default function DashboardPage() {
                   )}
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>No insight yet today</p>
+                <button 
+                  onClick={refreshInsight}
+                  style={{ 
+                    backgroundColor: '#f97316', 
+                    color: 'white', 
+                    padding: '8px 16px', 
+                    borderRadius: '8px', 
+                    border: 'none', 
+                    fontSize: '13px', 
+                    fontWeight: '600', 
+                    cursor: 'pointer' 
+                  }}
+                >
+                  Generate Insight
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
