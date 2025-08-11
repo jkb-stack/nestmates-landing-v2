@@ -1,9 +1,3 @@
-import OpenAI from 'openai'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
 export async function POST(request) {
   try {
     const { userPreferences, forceNew } = await request.json()
@@ -78,25 +72,38 @@ Make each insight unique and scientifically grounded. Focus on the emotional and
 
     console.log('Sending insight prompt to OpenAI...')
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "You are a relationship psychology expert. Always return valid JSON only. Focus on neuroscience and evidence-based psychology."
-        },
-        {
-          role: "user", 
-          content: prompt
-        }
-      ],
-      temperature: 0.85,
-      max_tokens: 600,
-      presence_penalty: 0.7,
-      frequency_penalty: 0.9
+    // Call OpenAI API using fetch
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are a relationship psychology expert. Always return valid JSON only. Focus on neuroscience and evidence-based psychology."
+          },
+          {
+            role: "user", 
+            content: prompt
+          }
+        ],
+        temperature: 0.85,
+        max_tokens: 600,
+        presence_penalty: 0.7,
+        frequency_penalty: 0.9
+      })
     })
 
-    const aiResponse = completion.choices[0].message.content
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const aiResponse = data.choices[0].message.content
     console.log('Raw insight AI response:', aiResponse)
     
     // Parse the JSON response
