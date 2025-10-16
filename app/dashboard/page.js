@@ -4,24 +4,11 @@ import { useState, useEffect } from 'react'
 export default function DashboardPage() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [userProgram, setUserProgram] = useState(null)
   const [todayInsight, setTodayInsight] = useState(null)
-  const [dateRecommendations, setDateRecommendations] = useState(null)
+  const [dateActivity, setDateActivity] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [generatingInsight, setGeneratingInsight] = useState(false)
-  const [generatingDate, setGeneratingDate] = useState(false)
-  const [partnerInput, setPartnerInput] = useState('')
-  const [showDateCustomizer, setShowDateCustomizer] = useState(false)
-
-  // Date customization state
-  const [datePreferences, setDatePreferences] = useState({
-    vibe: 'romantic',
-    budget: 100,
-    distance: 20,
-    timeOfDay: 'evening',
-    duration: 'half-day',
-    setting: 'either',
-    occasion: 'just-because'
-  })
+  const [showCelebration, setShowCelebration] = useState(false)
 
   useEffect(() => {
     loadUserData()
@@ -31,7 +18,6 @@ export default function DashboardPage() {
     try {
       const { supabase } = await import('../supabase')
       
-      // Get current user
       const { data: { user }, error: userError } = await supabase.auth.getUser()
       if (userError || !user) {
         window.location.href = '/login'
@@ -39,7 +25,6 @@ export default function DashboardPage() {
       }
       setUser(user)
 
-      // Get user profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -49,17 +34,12 @@ export default function DashboardPage() {
       if (profileData) {
         setProfile(profileData)
         
-        // Check if user completed onboarding
         if (!profileData.onboarding_completed) {
           window.location.href = '/onboarding'
           return
         }
 
-        // Load today's insight
-        await loadTodayInsight(user.id, profileData)
-        
-        // Generate date recommendations
-        await generateDateRecommendations(profileData)
+        await loadOrCreateProgram(user.id, profileData)
       }
 
     } catch (error) {
@@ -69,162 +49,120 @@ export default function DashboardPage() {
     }
   }
 
-  const loadTodayInsight = async (userId, userProfile) => {
+  const loadOrCreateProgram = async (userId, userProfile) => {
     try {
       const { supabase } = await import('../supabase')
       
-      // Get today's insight
-      const today = new Date().toISOString().split('T')[0]
-      const { data: insightData } = await supabase
-        .from('daily_insights')
+      let { data: programData } = await supabase
+        .from('user_program_progress')
         .select('*')
         .eq('user_id', userId)
-        .eq('insight_date', today)
         .single()
 
-      if (insightData) {
-        setTodayInsight(insightData)
-      } else {
-        // Generate today's insight
-        await generateTodayInsight(userId, userProfile)
-      }
-    } catch (error) {
-      console.error('Error loading insight:', error)
-    }
-  }
-
-  const generateTodayInsight = async (userId, userProfile, forceNew = false) => {
-    setGeneratingInsight(true)
-    try {
-      const { supabase } = await import('../supabase')
-
-      console.log('Generating new insight, forceNew:', forceNew)
-
-      // Call our AI API
-      const response = await fetch('/api/generate-insight', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userPreferences: {
-            city: userProfile.location_city,
-            state: userProfile.location_state,
-            interests: userProfile.interests,
-            budget: userProfile.budget
-          },
-          forceNew: forceNew
-        })
-      })
-
-      console.log('Insight API response status:', response.status)
-      const aiInsight = await response.json()
-      console.log('Insight API response:', aiInsight)
-
-      if (aiInsight.error) {
-        throw new Error(aiInsight.error)
+      if (!programData) {
+        const { data: newProgram } = await supabase
+          .from('user_program_progress')
+          .insert({
+            user_id: userId,
+            current_day: 1,
+            current_week: 1,
+            program_start_date: new Date().toISOString(),
+            streak: 0,
+            last_activity_date: new Date().toISOString()
+          })
+          .select()
+          .single()
+        
+        programData = newProgram
       }
 
-      // Save to database
-      const today = new Date().toISOString().split('T')[0]
-      const { data, error } = await supabase
-        .from('daily_insights')
-        .upsert({
-          user_id: userId,
-          insight_date: today,
-          title: aiInsight.title,
-          content: aiInsight.content,
-          exercise: aiInsight.exercise,
-          psychology_source: aiInsight.psychology_source,
-          coins_awarded: 50,
-          completed: false
-        }, {
-          onConflict: 'user_id,insight_date'
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      setTodayInsight(data)
-      console.log('Successfully set new insight:', data)
-
-    } catch (error) {
-      console.error('Error generating insight:', error)
-    } finally {
-      setGeneratingInsight(false)
-    }
-  }
-
-  const generateDateRecommendations = async (userProfile, customPrefs = null) => {
-    setGeneratingDate(true)
-    try {
-      console.log('Generating date recommendations with preferences:', customPrefs)
+      setUserProgram(programData)
+      await loadTodayContent(userId, userProfile, programData)
       
-      const response = await fetch('/api/generate-date', {
+    } catch (error) {
+      console.error('Error loading program:', error)
+    }
+  }
+
+  const loadTodayContent = async (userId, userProfile, programData) => {
+    try {
+      const insightResponse = await fetch('/api/generate-insight', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userPreferences: {
             city: userProfile.location_city,
             state: userProfile.location_state,
-            interests: userProfile.interests,
-            budget: userProfile.budget
+            interests: userProfile.interests
           },
-          customPreferences: customPrefs
+          userProgram: programData
         })
       })
 
-      console.log('Date API response status:', response.status)
-      const dateData = await response.json()
-      console.log('Date API response:', dateData)
+      const insightData = await insightResponse.json()
+      setTodayInsight(insightData)
 
-      if (dateData.error) {
-        throw new Error(dateData.error)
-      }
+      const dateResponse = await fetch('/api/generate-date', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userPreferences: {
+            city: userProfile.location_city,
+            state: userProfile.location_state,
+            interests: userProfile.interests
+          },
+          userProgram: programData
+        })
+      })
 
-      setDateRecommendations(dateData.recommendations)
-      console.log('Setting date recommendations:', dateData.recommendations)
+      const dateData = await dateResponse.json()
+      setDateActivity(dateData.recommendations?.primaryDate)
 
     } catch (error) {
-      console.error('Error generating date recommendations:', error)
-      setDateRecommendations({
-        primaryDate: {
-          title: "Explore Your City Together",
-          description: "Sometimes the best dates are the simplest ones. Take a walk through your neighborhood and discover something new together.",
-          timeline: ["Evening - Take a stroll", "End with coffee or dessert"],
-          totalCost: "Free - $20",
-          venues: [{ name: "Local neighborhood", activity: "Walking and exploring" }]
-        }
-      })
-    } finally {
-      setGeneratingDate(false)
+      console.error('Error loading content:', error)
     }
   }
 
-  const completeExercise = async () => {
+  const completeQuickAction = async () => {
     try {
       const { supabase } = await import('../supabase')
+      
+      const today = new Date().toISOString().split('T')[0]
+      const lastActivity = new Date(userProgram.last_activity_date).toISOString().split('T')[0]
+      
+      const newStreak = today === lastActivity ? userProgram.streak : userProgram.streak + 1
+      const newDay = userProgram.current_day + (today === lastActivity ? 0 : 1)
+      const newWeek = Math.ceil(newDay / 7)
+      
+      const hitMilestone = newDay % 7 === 0
       
       await supabase
-        .from('daily_insights')
-        .update({ completed: true })
-        .eq('id', todayInsight.id)
+        .from('user_program_progress')
+        .update({
+          current_day: newDay,
+          current_week: newWeek,
+          streak: newStreak,
+          last_activity_date: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
 
-      setTodayInsight(prev => ({ ...prev, completed: true }))
-      
-      alert('🎉 Great job! You earned 50 Connection Coins!')
+      setUserProgram(prev => ({
+        ...prev,
+        current_day: newDay,
+        current_week: newWeek,
+        streak: newStreak
+      }))
+
+      if (hitMilestone) {
+        setShowCelebration(true)
+        setTimeout(() => setShowCelebration(false), 3000)
+      }
+
+      alert(`✅ Great job! Day ${newDay} complete. Streak: ${newStreak} days 🔥`)
 
     } catch (error) {
-      console.error('Error completing exercise:', error)
+      console.error('Error completing action:', error)
     }
-  }
-
-  const handleCustomDateGeneration = () => {
-    setShowDateCustomizer(false)
-    generateDateRecommendations(profile, datePreferences)
   }
 
   const handleLogout = async () => {
@@ -238,7 +176,7 @@ export default function DashboardPage() {
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff8e1' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '32px', marginBottom: '16px' }}>🔄</div>
-          <p style={{ fontSize: '18px', color: '#6b7280' }}>Loading your personalized experience...</p>
+          <p style={{ fontSize: '18px', color: '#6b7280' }}>Loading your journey...</p>
         </div>
       </div>
     )
@@ -248,20 +186,50 @@ export default function DashboardPage() {
     <>
       <div style={{ 
         minHeight: '100vh', 
-        background: 'linear-gradient(135deg, rgba(255, 248, 225, 0.92), rgba(78, 205, 196, 0.92))',
-        backgroundImage: `url(/sideimagehands.jpg), url(/couple-embracing.jpg)`,
-        backgroundPosition: 'left center, right center',
-        backgroundRepeat: 'no-repeat, no-repeat',
-        backgroundSize: '25% auto, 20% auto',
-        backgroundAttachment: 'fixed',
+        background: 'linear-gradient(135deg, rgba(255, 248, 225, 0.95), rgba(167, 139, 250, 0.15))',
         padding: '20px 20px 100px 20px'
       }}>
         
-        {/* Header */}
+        {showCelebration && (
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'white',
+            padding: '40px',
+            borderRadius: '20px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            zIndex: 1000,
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '64px', marginBottom: '20px' }}>🎉</div>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#7c3aed', marginBottom: '10px' }}>
+              Week {userProgram.current_week} Complete!
+            </h2>
+            <p style={{ color: '#6b7280', fontSize: '16px' }}>New insights unlocked for next week</p>
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', maxWidth: '1400px', margin: '0 auto 30px auto' }}>
           <img src="/NestMates_App_Icon.png" alt="NestMates" style={{ height: '56px' }} />
-          <div style={{ display: 'flex', gap: '15px' }}>
-            <span style={{ color: '#1f2937', fontSize: '16px', fontWeight: '500' }}>Welcome, {profile?.first_name || user?.email}</span>
+          <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+            <div style={{ 
+              backgroundColor: 'white', 
+              padding: '8px 16px', 
+              borderRadius: '20px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '20px' }}>🔥</span>
+              <span style={{ fontWeight: 'bold', color: '#f97316' }}>{userProgram?.streak || 0}</span>
+              <span style={{ fontSize: '12px', color: '#6b7280' }}>day streak</span>
+            </div>
+            <span style={{ color: '#1f2937', fontSize: '16px', fontWeight: '500' }}>
+              {profile?.first_name || user?.email?.split('@')[0]}
+            </span>
             <button 
               onClick={handleLogout}
               style={{ color: '#ef4444', fontSize: '16px', fontWeight: '500', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -271,437 +239,248 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Three Column Layout */}
+        <div style={{ 
+          maxWidth: '1400px', 
+          margin: '0 auto 30px auto',
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          padding: '20px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div>
+              <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#7c3aed', margin: 0 }}>
+                Week {userProgram?.current_week || 1} • Day {userProgram?.current_day || 1} of 112
+              </h3>
+              <p style={{ fontSize: '12px', color: '#6b7280', margin: '4px 0 0 0' }}>
+                {userProgram?.current_week <= 4 ? "Acknowledging the Transition" : 
+                 userProgram?.current_week <= 8 ? "Processing Grief & Loss" :
+                 userProgram?.current_week <= 12 ? "Rediscovering Identity" : "Rebuilding Connection"}
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7c3aed' }}>
+                {Math.round((userProgram?.current_day || 1) / 112 * 100)}%
+              </div>
+              <div style={{ fontSize: '11px', color: '#6b7280' }}>Complete</div>
+            </div>
+          </div>
+          
+          <div style={{ backgroundColor: '#f3f4f6', borderRadius: '10px', height: '8px' }}>
+            <div style={{ 
+              backgroundColor: '#7c3aed', 
+              borderRadius: '10px', 
+              height: '100%', 
+              width: `${(userProgram?.current_day || 1) / 112 * 100}%`,
+              transition: 'width 0.5s ease'
+            }}></div>
+          </div>
+        </div>
+
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '25px' }}>
           
-          {/* Perfect Date Tonight */}
           <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '25px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ fontSize: '24px', marginRight: '12px' }}>🌟</div>
-                <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Perfect Date Tonight</h2>
+                <div style={{ fontSize: '24px', marginRight: '12px' }}>💡</div>
+                <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Today's Insight</h2>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button 
-                  onClick={() => setShowDateCustomizer(true)}
-                  style={{ 
-                    backgroundColor: '#f97316', 
-                    color: 'white', 
-                    padding: '6px 12px', 
-                    borderRadius: '6px', 
-                    border: 'none', 
-                    fontSize: '12px', 
-                    fontWeight: '600', 
-                    cursor: 'pointer' 
-                  }}
-                >
-                  Customize
-                </button>
-                <button 
-                  onClick={() => generateDateRecommendations(profile)}
-                  style={{ 
-                    backgroundColor: '#e5e7eb', 
-                    color: '#6b7280', 
-                    padding: '6px 8px', 
-                    borderRadius: '6px', 
-                    border: 'none', 
-                    fontSize: '12px', 
-                    cursor: 'pointer' 
-                  }}
-                >
-                  🔄
-                </button>
+              <div style={{ 
+                backgroundColor: '#fef3c7', 
+                padding: '4px 12px', 
+                borderRadius: '12px',
+                fontSize: '11px',
+                fontWeight: '600',
+                color: '#92400e'
+              }}>
+                Day {userProgram?.current_day || 1}
               </div>
             </div>
 
-            {generatingDate ? (
-              <div style={{ textAlign: 'center', padding: '30px' }}>
-                <div style={{ fontSize: '32px', marginBottom: '16px' }}>✨</div>
-                <p style={{ color: '#6b7280', fontSize: '14px' }}>Finding perfect local dates...</p>
-                <div style={{ width: '30px', height: '30px', border: '3px solid #fed7aa', borderTop: '3px solid #f97316', borderRadius: '50%', margin: '15px auto', animation: 'spin 1s linear infinite' }}></div>
-              </div>
-            ) : dateRecommendations?.primaryDate ? (
+            {todayInsight ? (
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#f97316', marginBottom: '12px' }}>{dateRecommendations.primaryDate.title}</h3>
+                <div style={{ 
+                  backgroundColor: '#fef7ff', 
+                  padding: '12px', 
+                  borderRadius: '10px', 
+                  marginBottom: '15px',
+                  border: '2px solid #e9d5ff'
+                }}>
+                  <p style={{ fontSize: '13px', fontWeight: '600', color: '#7c3aed', margin: 0, fontStyle: 'italic' }}>
+                    "{todayInsight.hook}"
+                  </p>
+                </div>
+
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '12px' }}>
+                  {todayInsight.title}
+                </h3>
                 
-                <p style={{ color: '#374151', fontSize: '14px', lineHeight: '1.5', marginBottom: '15px' }}>
-                  {dateRecommendations.primaryDate.description}
-                </p>
-
-                <div style={{ backgroundColor: '#f0f9ff', padding: '15px', borderRadius: '10px', marginBottom: '15px' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#0369a1', marginBottom: '8px' }}>Tonight's Timeline:</h4>
-                  {dateRecommendations.primaryDate.timeline?.map((time, index) => (
-                    <div key={index} style={{ color: '#0369a1', fontSize: '13px', marginBottom: '4px' }}>• {time}</div>
-                  ))}
+                <div style={{ color: '#374151', lineHeight: '1.6', marginBottom: '15px', fontSize: '14px' }}>
+                  {todayInsight.content}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: '#059669' }}>
-                    Cost: {dateRecommendations.primaryDate.totalCost}
-                  </span>
-                </div>
-
-                {dateRecommendations.primaryDate.venues?.map((venue, index) => (
-                  <div key={index} style={{ backgroundColor: '#fef3c7', padding: '10px', borderRadius: '8px', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e' }}>{venue.name}</div>
-                    <div style={{ fontSize: '12px', color: '#92400e' }}>{venue.activity}</div>
+                <div style={{ 
+                  backgroundColor: '#f0f9ff', 
+                  padding: '12px', 
+                  borderRadius: '10px', 
+                  marginBottom: '15px',
+                  border: '1px solid #bae6fd'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: '#0369a1', marginBottom: '4px' }}>
+                    💡 DID YOU KNOW?
                   </div>
-                ))}
+                  <p style={{ fontSize: '12px', color: '#0c4a6e', margin: 0 }}>
+                    {todayInsight.interesting_fact}
+                  </p>
+                </div>
+
+                <div style={{ backgroundColor: '#fef3c7', padding: '15px', borderRadius: '10px', marginBottom: '15px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '8px' }}>
+                    ⚡ Today's Quick Action (2 minutes):
+                  </h4>
+                  <p style={{ color: '#92400e', fontSize: '13px', margin: '0 0 12px 0' }}>
+                    {todayInsight.quick_action}
+                  </p>
+                  <button 
+                    onClick={completeQuickAction}
+                    style={{ 
+                      width: '100%',
+                      backgroundColor: '#10b981', 
+                      color: 'white', 
+                      padding: '10px', 
+                      borderRadius: '8px', 
+                      border: 'none', 
+                      fontSize: '13px', 
+                      fontWeight: '600', 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    ✓ Mark Complete
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <small style={{ color: '#9ca3af', fontSize: '10px' }}>
+                    Source: {todayInsight.research_credit}
+                  </small>
+                </div>
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '30px' }}>
-                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading date recommendations...</p>
+                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading today's insight...</p>
               </div>
             )}
           </div>
 
-          {/* Today's AI Insight */}
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '25px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ fontSize: '24px', marginRight: '12px' }}>🧠</div>
-                <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Today's Insight</h2>
-              </div>
-              <button 
-                onClick={() => generateTodayInsight(user.id, profile, true)}
-                style={{ 
-                  backgroundColor: '#e5e7eb', 
-                  color: '#6b7280', 
-                  padding: '6px 8px', 
-                  borderRadius: '6px', 
-                  border: 'none', 
-                  fontSize: '12px', 
-                  cursor: 'pointer' 
-                }}
-              >
-                🔄
-              </button>
-            </div>
-
-            {generatingInsight ? (
-              <div style={{ textAlign: 'center', padding: '30px' }}>
-                <div style={{ fontSize: '32px', marginBottom: '16px' }}>✨</div>
-                <p style={{ color: '#6b7280', fontSize: '14px' }}>Creating your insight...</p>
-                <div style={{ width: '30px', height: '30px', border: '3px solid #fed7aa', borderTop: '3px solid #f97316', borderRadius: '50%', margin: '15px auto', animation: 'spin 1s linear infinite' }}></div>
-              </div>
-            ) : todayInsight ? (
-              <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#f97316', marginBottom: '12px' }}>{todayInsight.title}</h3>
-                
-                <div style={{ color: '#374151', lineHeight: '1.5', marginBottom: '15px', fontSize: '14px' }}>
-                  {todayInsight.content.split('\n').slice(0, 2).map((paragraph, index) => (
-                    <p key={index} style={{ marginBottom: '10px' }}>{paragraph}</p>
-                  ))}
-                </div>
-
-                <div style={{ backgroundColor: '#fef3c7', padding: '15px', borderRadius: '10px', marginBottom: '15px' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#92400e', marginBottom: '8px' }}>Today's Challenge:</h4>
-                  <p style={{ color: '#92400e', fontSize: '13px', margin: 0 }}>{todayInsight.exercise}</p>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <small style={{ color: '#6b7280', fontSize: '11px' }}>{todayInsight.psychology_source}</small>
-                  
-                  {!todayInsight.completed ? (
-                    <button 
-                      onClick={completeExercise}
-                      style={{ backgroundColor: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-                    >
-                      Complete (+50 coins)
-                    </button>
-                  ) : (
-                    <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600' }}>✅ Done! +50</div>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Partner Connection */}
           <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '25px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-              <div style={{ fontSize: '24px', marginRight: '12px' }}>💕</div>
-              <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Partner Connection</h2>
+              <div style={{ fontSize: '24px', marginRight: '12px' }}>💑</div>
+              <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>This Week's Activity</h2>
             </div>
 
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ backgroundColor: '#fef3c7', padding: '18px', borderRadius: '12px', marginBottom: '18px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#92400e', marginBottom: '8px' }}>Your Partner Code</h3>
-                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f97316', marginBottom: '8px' }}>NEST-{user?.id.slice(-4).toUpperCase()}</div>
-                <p style={{ color: '#92400e', fontSize: '12px' }}>Share this with your partner</p>
-              </div>
-
+            {dateActivity ? (
               <div>
-                <input
-                  type="text"
-                  placeholder="Enter partner's code"
-                  value={partnerInput}
-                  onChange={(e) => setPartnerInput(e.target.value)}
-                  style={{ width: '100%', padding: '10px', border: '2px solid #e5e7eb', borderRadius: '6px', fontSize: '14px', marginBottom: '10px' }}
-                />
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#f97316', marginBottom: '12px' }}>
+                  {dateActivity.title}
+                </h3>
+                
+                <p style={{ color: '#374151', fontSize: '14px', lineHeight: '1.5', marginBottom: '15px' }}>
+                  {dateActivity.description}
+                </p>
+
+                {dateActivity.timeline && (
+                  <div style={{ backgroundColor: '#f0f9ff', padding: '15px', borderRadius: '10px', marginBottom: '15px' }}>
+                    <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#0369a1', marginBottom: '8px' }}>
+                      Activity Flow:
+                    </h4>
+                    {dateActivity.timeline.map((step, index) => (
+                      <div key={index} style={{ color: '#0369a1', fontSize: '12px', marginBottom: '4px' }}>
+                        • {step}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <button 
-                  style={{ width: '100%', backgroundColor: '#f97316', color: 'white', padding: '10px', borderRadius: '6px', border: 'none', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}
+                  onClick={() => window.location.href = '/conversations'}
+                  style={{ 
+                    width: '100%',
+                    backgroundColor: '#f97316', 
+                    color: 'white', 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    border: 'none', 
+                    fontSize: '14px', 
+                    fontWeight: '600', 
+                    cursor: 'pointer' 
+                  }}
                 >
-                  Connect Partner
+                  See More Activities
                 </button>
               </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '30px' }}>
+                <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading activity...</p>
+              </div>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '25px', boxShadow: '0 8px 25px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '24px', marginRight: '12px' }}>🤝</div>
+              <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>You're Not Alone</h2>
+            </div>
+
+            <div style={{ backgroundColor: '#f0fdf4', padding: '15px', borderRadius: '12px', marginBottom: '15px', border: '1px solid #bbf7d0' }}>
+              <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#15803d', marginBottom: '4px' }}>
+                2,847
+              </div>
+              <div style={{ fontSize: '12px', color: '#15803d' }}>
+                people completed today's insight
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: '#fef3c7', padding: '15px', borderRadius: '12px', marginBottom: '15px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#92400e', marginBottom: '8px' }}>
+                📅 Coming Up:
+              </div>
+              <div style={{ fontSize: '12px', color: '#92400e' }}>
+                {userProgram?.current_day % 7 === 0 ? 
+                  `Week ${(userProgram?.current_week || 0) + 1} starts tomorrow!` :
+                  `${7 - (userProgram?.current_day % 7)} days until Week ${(userProgram?.current_week || 0) + 1}`
+                }
+              </div>
+            </div>
+
+            <div style={{ 
+              backgroundColor: '#fef2f2', 
+              padding: '15px', 
+              borderRadius: '12px',
+              border: '1px solid #fecaca'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#991b1b', marginBottom: '8px' }}>
+                📞 Need Additional Support?
+              </div>
+              <p style={{ fontSize: '11px', color: '#991b1b', marginBottom: '10px' }}>
+                This app provides educational content, not professional counseling.
+              </p>
             </div>
           </div>
-        </div>
 
+        </div>
       </div>
 
-      {/* Date Customization Modal */}
-      {showDateCustomizer && (
-        <>
-          <div 
-            style={{ 
-              position: 'fixed', 
-              top: 0, 
-              left: 0, 
-              right: 0, 
-              bottom: 0, 
-              backgroundColor: 'rgba(0, 0, 0, 0.5)', 
-              backdropFilter: 'blur(4px)', 
-              zIndex: 999,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '20px'
-            }}
-            onClick={() => setShowDateCustomizer(false)}
-          >
-            <div 
-              style={{ 
-                backgroundColor: 'white', 
-                borderRadius: '20px', 
-                padding: '30px', 
-                maxWidth: '500px',
-                width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-                <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', margin: 0 }}>Customize Your Perfect Date</h2>
-                <button 
-                  onClick={() => setShowDateCustomizer(false)}
-                  style={{ fontSize: '24px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  ×
-                </button>
-              </div>
-
-              {/* Date Vibe */}
-              <div style={{ marginBottom: '25px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>What's the vibe? ✨</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-                  {[
-                    { id: 'romantic', emoji: '🌹', label: 'Romantic & Intimate' },
-                    { id: 'adventure', emoji: '🎯', label: 'Adventure & Active' },
-                    { id: 'cultural', emoji: '🎨', label: 'Cultural & Learning' },
-                    { id: 'cozy', emoji: '🏠', label: 'Cozy & Relaxing' },
-                    { id: 'fun', emoji: '🎉', label: 'Fun & Playful' },
-                    { id: 'upscale', emoji: '🍷', label: 'Upscale & Sophisticated' }
-                  ].map(vibe => (
-                    <button
-                      key={vibe.id}
-                      onClick={() => setDatePreferences(prev => ({ ...prev, vibe: vibe.id }))}
-                      style={{
-                        padding: '12px',
-                        border: `2px solid ${datePreferences.vibe === vibe.id ? '#f97316' : '#e5e7eb'}`,
-                        borderRadius: '10px',
-                        backgroundColor: datePreferences.vibe === vibe.id ? '#fff7ed' : 'white',
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        fontSize: '12px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      <div style={{ fontSize: '20px', marginBottom: '4px' }}>{vibe.emoji}</div>
-                      {vibe.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Budget */}
-              <div style={{ marginBottom: '25px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Budget for tonight 💰</h3>
-                <input
-                  type="range"
-                  min="0"
-                  max="300"
-                  step="25"
-                  value={datePreferences.budget}
-                  onChange={(e) => setDatePreferences(prev => ({ ...prev, budget: parseInt(e.target.value) }))}
-                  style={{ width: '100%', marginBottom: '8px' }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#6b7280' }}>
-                  <span>Free</span>
-                  <span style={{ fontWeight: '600', color: '#f97316' }}>${datePreferences.budget}+</span>
-                  <span>$300+</span>
-                </div>
-              </div>
-
-              {/* Distance */}
-              <div style={{ marginBottom: '25px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>How far to travel? 📍</h3>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {[
-                    { value: 10, label: '10 miles' },
-                    { value: 20, label: '20 miles' },
-                    { value: 30, label: '30 miles' },
-                    { value: 50, label: '50+ miles' }
-                  ].map(distance => (
-                    <button
-                      key={distance.value}
-                      onClick={() => setDatePreferences(prev => ({ ...prev, distance: distance.value }))}
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        border: `2px solid ${datePreferences.distance === distance.value ? '#f97316' : '#e5e7eb'}`,
-                        borderRadius: '8px',
-                        backgroundColor: datePreferences.distance === distance.value ? '#fff7ed' : 'white',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      {distance.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Time of Day */}
-              <div style={{ marginBottom: '25px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>When? ⏰</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-                  {[
-                    { id: 'morning', emoji: '☀️', label: 'Morning' },
-                    { id: 'afternoon', emoji: '🌤️', label: 'Afternoon' },
-                    { id: 'evening', emoji: '🌅', label: 'Evening' },
-                    { id: 'all-day', emoji: '🌍', label: 'All Day' }
-                  ].map(time => (
-                    <button
-                      key={time.id}
-                      onClick={() => setDatePreferences(prev => ({ ...prev, timeOfDay: time.id }))}
-                      style={{
-                        padding: '12px',
-                        border: `2px solid ${datePreferences.timeOfDay === time.id ? '#f97316' : '#e5e7eb'}`,
-                        borderRadius: '10px',
-                        backgroundColor: datePreferences.timeOfDay === time.id ? '#fff7ed' : 'white',
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        fontSize: '12px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      <div style={{ fontSize: '18px', marginBottom: '4px' }}>{time.emoji}</div>
-                      {time.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Duration */}
-              <div style={{ marginBottom: '25px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>How long? ⏱️</h3>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {[
-                    { id: 'quick', label: 'Quick (1-2 hrs)' },
-                    { id: 'half-day', label: 'Half Day' },
-                    { id: 'full-day', label: 'Full Day' }
-                  ].map(duration => (
-                    <button
-                      key={duration.id}
-                      onClick={() => setDatePreferences(prev => ({ ...prev, duration: duration.id }))}
-                      style={{
-                        flex: 1,
-                        padding: '10px',
-                        border: `2px solid ${datePreferences.duration === duration.id ? '#f97316' : '#e5e7eb'}`,
-                        borderRadius: '8px',
-                        backgroundColor: datePreferences.duration === duration.id ? '#fff7ed' : 'white',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      {duration.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Setting */}
-              <div style={{ marginBottom: '30px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Indoor or outdoor? 🏠</h3>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {[
-                    { id: 'indoor', emoji: '🏠', label: 'Indoor' },
-                    { id: 'outdoor', emoji: '🌳', label: 'Outdoor' },
-                    { id: 'either', emoji: '🌟', label: 'Either' }
-                  ].map(setting => (
-                    <button
-                      key={setting.id}
-                      onClick={() => setDatePreferences(prev => ({ ...prev, setting: setting.id }))}
-                      style={{
-                        flex: 1,
-                        padding: '12px',
-                        border: `2px solid ${datePreferences.setting === setting.id ? '#f97316' : '#e5e7eb'}`,
-                        borderRadius: '8px',
-                        backgroundColor: datePreferences.setting === setting.id ? '#fff7ed' : 'white',
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        fontSize: '12px',
-                        fontWeight: '500'
-                      }}
-                    >
-                      <div style={{ fontSize: '16px', marginBottom: '4px' }}>{setting.emoji}</div>
-                      {setting.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Generate Button */}
-              <button
-                onClick={handleCustomDateGeneration}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#f97316',
-                  color: 'white',
-                  padding: '16px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)'
-                }}
-              >
-                ✨ Generate My Perfect Date
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Bottom Navigation */}
       <div style={{ 
         position: 'fixed', 
         bottom: 0, 
         left: 0, 
         right: 0, 
-        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+        backgroundColor: 'rgba(255, 255, 255, 0.98)', 
         backdropFilter: 'blur(10px)',
         borderTop: '1px solid rgba(0, 0, 0, 0.1)',
-        padding: '10px 0',
-        zIndex: 100
+        padding: '12px 0',
+        zIndex: 100,
+        boxShadow: '0 -2px 10px rgba(0,0,0,0.05)'
       }}>
         <div style={{ 
           display: 'flex', 
@@ -720,27 +499,11 @@ export default function DashboardPage() {
               background: 'none', 
               border: 'none', 
               cursor: 'pointer',
-              color: '#f97316'
+              color: '#7c3aed'
             }}
           >
-            <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏠</div>
+            <div style={{ fontSize: '22px', marginBottom: '4px' }}>🏠</div>
             <span style={{ fontSize: '11px', fontWeight: '600' }}>Home</span>
-          </button>
-
-          <button 
-            onClick={() => window.location.href = '/local-activities'}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer',
-              color: '#6b7280'
-            }}
-          >
-            <div style={{ fontSize: '20px', marginBottom: '4px' }}>📍</div>
-            <span style={{ fontSize: '11px', fontWeight: '600' }}>Activities</span>
           </button>
 
           <button 
@@ -755,50 +518,4 @@ export default function DashboardPage() {
               color: '#6b7280'
             }}
           >
-            <div style={{ fontSize: '20px', marginBottom: '4px' }}>💬</div>
-            <span style={{ fontSize: '11px', fontWeight: '600' }}>Chat</span>
-          </button>
-
-          <button 
-            onClick={() => window.location.href = '/progress'}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer',
-              color: '#6b7280'
-            }}
-          >
-            <div style={{ fontSize: '20px', marginBottom: '4px' }}>📊</div>
-            <span style={{ fontSize: '11px', fontWeight: '600' }}>Progress</span>
-          </button>
-
-          <button 
-            onClick={() => window.location.href = '/settings'}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer',
-              color: '#6b7280'
-            }}
-          >
-            <div style={{ fontSize: '20px', marginBottom: '4px' }}>⚙️</div>
-            <span style={{ fontSize: '11px', fontWeight: '600' }}>Settings</span>
-          </button>
-        </div>
-      </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-    </>
-  )
-}
+            <div style={{ fontSize: '22px', marginBottom: '4px' }}>💬</div>
