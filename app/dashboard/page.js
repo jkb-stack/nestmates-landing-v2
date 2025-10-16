@@ -123,62 +123,22 @@ export default function DashboardPage() {
     }
   }
 
- const completeQuickAction = async () => {
-  try {
-    const { supabase } = await import('../supabase')
-    
-    const today = new Date().toISOString().split('T')[0]
-    const lastActivity = userProgram.last_activity_date ? 
-      new Date(userProgram.last_activity_date).toISOString().split('T')[0] : 
-      null
-    
-    // Check if this is a new day
-    const isNewDay = lastActivity !== today
-    
-    const newStreak = isNewDay ? userProgram.streak + 1 : userProgram.streak
-    const newDay = isNewDay ? userProgram.current_day + 1 : userProgram.current_day
-    const newWeek = Math.ceil(newDay / 7)
-    
-    const hitMilestone = newDay % 7 === 0 && isNewDay
-    
-    // Update database
-    await supabase
-      .from('user_program_progress')
-      .update({
-        current_day: newDay,
-        current_week: newWeek,
-        streak: newStreak,
-        last_activity_date: new Date().toISOString(),
-        total_insights_completed: (userProgram.total_insights_completed || 0) + 1
-      })
-      .eq('user_id', user.id)
-
-    if (hitMilestone) {
-      setShowCelebration(true)
-      setTimeout(() => setShowCelebration(false), 3000)
-    }
-
-    alert(`✅ Great job! Day ${newDay} complete. Streak: ${newStreak} days 🔥`)
-    
-    // Reload the page to show new content
-    window.location.reload()
-
-  } catch (error) {
-    console.error('Error completing action:', error)
-    alert('Error updating progress. Please try again.')
-  }
-}
+  const completeQuickAction = async () => {
     try {
       const { supabase } = await import('../supabase')
       
       const today = new Date().toISOString().split('T')[0]
-      const lastActivity = new Date(userProgram.last_activity_date).toISOString().split('T')[0]
+      const lastActivity = userProgram.last_activity_date ? 
+        new Date(userProgram.last_activity_date).toISOString().split('T')[0] : 
+        null
       
-      const newStreak = today === lastActivity ? userProgram.streak : userProgram.streak + 1
-      const newDay = userProgram.current_day + (today === lastActivity ? 0 : 1)
+      const isNewDay = lastActivity !== today
+      
+      const newStreak = isNewDay ? userProgram.streak + 1 : userProgram.streak
+      const newDay = isNewDay ? userProgram.current_day + 1 : userProgram.current_day
       const newWeek = Math.ceil(newDay / 7)
       
-      const hitMilestone = newDay % 7 === 0
+      const hitMilestone = newDay % 7 === 0 && isNewDay
       
       await supabase
         .from('user_program_progress')
@@ -186,16 +146,10 @@ export default function DashboardPage() {
           current_day: newDay,
           current_week: newWeek,
           streak: newStreak,
-          last_activity_date: new Date().toISOString()
+          last_activity_date: new Date().toISOString(),
+          total_insights_completed: (userProgram.total_insights_completed || 0) + 1
         })
         .eq('user_id', user.id)
-
-      setUserProgram(prev => ({
-        ...prev,
-        current_day: newDay,
-        current_week: newWeek,
-        streak: newStreak
-      }))
 
       if (hitMilestone) {
         setShowCelebration(true)
@@ -203,9 +157,12 @@ export default function DashboardPage() {
       }
 
       alert(`✅ Great job! Day ${newDay} complete. Streak: ${newStreak} days 🔥`)
+      
+      window.location.reload()
 
     } catch (error) {
       console.error('Error completing action:', error)
+      alert('Error updating progress. Please try again.')
     }
   }
 
